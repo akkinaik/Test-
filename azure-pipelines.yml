@@ -1,34 +1,66 @@
 trigger:
-- main  # Runs every time you push to main
+- main
 
 pool:
-  vmImage: 'windows-latest' # Required for BC Docker containers
+  vmImage: 'windows-2022' # Most stable image for BC Docker builds
+
+variables:
+  # The folder in your GitHub repo containing app.json
+  project_path: 'BCTrainingApp'
+  # Set the BC version you want to build against
+  bc_version: 'latest' 
 
 steps:
-# 1. Pull code from GitHub
 - checkout: self
 
-# 2. Create the BC environment (Docker)
+# 1. OPTIONAL: Clean up the hosted agent's disk to prevent the 0x3 error
+- powershell: |
+    Write-Host "Clearing Docker cache and temporary files to free up space..."
+    docker system prune -a -f
+    # Remove unnecessary tool caches to make room for the BC Image
+    Remove-Item -Recurse -Force "C:\hostedtoolcache\windows\Ruby" -ErrorAction SilentlyContinue
+    Remove-Item -Recurse -Force "C:\hostedtoolcache\windows\Go" -ErrorAction SilentlyContinue
+    Remove-Item -Recurse -Force "C:\hostedtoolcache\windows\Python" -ErrorAction SilentlyContinue
+  displayName: 'Free up Disk Space'
+
+# 2. Create the Business Central Docker Container
 - task: ALOpsDockerCreate@1
-  displayName: 'Spin up BC Container'
+  displayName: 'ALOps: Create BC Container'
   inputs:
     artifact_type: 'sandbox'
-    version_select: 'latest'
+    version_select: '$(bc_version)'
+    container_memory: '8G' # Standard for hosted agents
 
-# 3. Compile your AL code into an .app file
+# 3. Wait for the container to be fully initialized
+- task: ALOpsDockerWait@1
+  displayName: 'ALOps: Wait for Docker'
+
+# 4. Compile the AL Project from your specific path
 - task: ALOpsAppCompiler@1
-  displayName: 'Compile App'
+  displayName: 'ALOps: Compile BCTrainingApp'
   inputs:
     usedependencies: true
+    projectpath: '$(project_path)'
+    nav_computer_name: 'BC'
+    # This prevents the build from failing if symbols aren't found immediately
+    failed_on_warnings: false 
 
-# 4. Save the compiled app so you can download it
+# 5. Copy the compiled .app file to the staging area
+- task: CopyFiles@2
+  displayName: 'Stage .app for Publishing'
+  inputs:
+    Contents: '$(project_path)/*.app'
+    TargetFolder: '$(Build.ArtifactStagingDirectory)'
+    flattenFolders: true
+
+# 6. Upload the artifact to Azure DevOps
 - task: PublishBuildArtifacts@1
-  displayName: 'Save .app File'
+  displayName: 'Publish Artifact: BCTrainingApp'
   inputs:
     PathtoPublish: '$(Build.ArtifactStagingDirectory)'
-    ArtifactName: 'BC_Build_Package'
+    ArtifactName: 'BC-Apps'
 
-# 5. Clean up
+# 7. Final Cleanup (Always runs, even if build fails)
 - task: ALOpsDockerRemove@1
-  displayName: 'Remove Container'
+  displayName: 'ALOps: Remove Container'
   condition: always()
