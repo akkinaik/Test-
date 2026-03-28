@@ -1,0 +1,34 @@
+trigger:
+- main  # Runs every time you push to main
+
+pool:
+  vmImage: 'windows-latest' # Required for BC Docker containers
+
+steps:
+# 1. Pull code from GitHub
+- checkout: self
+
+# 2. Create the BC environment (Docker)
+- task: ALOpsDockerCreate@1
+  displayName: 'Spin up BC Container'
+  inputs:
+    artifact_type: 'sandbox'
+    version_select: 'latest'
+
+# 3. Compile your AL code into an .app file
+- task: ALOpsAppCompiler@1
+  displayName: 'Compile App'
+  inputs:
+    usedependencies: true
+
+# 4. Save the compiled app so you can download it
+- task: PublishBuildArtifacts@1
+  displayName: 'Save .app File'
+  inputs:
+    PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+    ArtifactName: 'BC_Build_Package'
+
+# 5. Clean up
+- task: ALOpsDockerRemove@1
+  displayName: 'Remove Container'
+  condition: always()
