@@ -2,65 +2,62 @@ trigger:
 - main
 
 pool:
-  vmImage: 'windows-2022' # Most stable image for BC Docker builds
+  vmImage: 'Windows-Latest'
 
-variables:
-  # The folder in your GitHub repo containing app.json
-  project_path: 'BCTrainingApp'
-  # Set the BC version you want to build against
-  bc_version: 'latest' 
+#variables:
+#- group: BuildVariables
 
-steps:
-- checkout: self
+jobs:
+- job: Build
+  timeoutInMinutes: 300
+  variables:
+    build.clean: all
+    platform: x64
+    version: 'ci'
+    appVersion: '2.0'
+    appBuild: $(Build.BuildID)
+    appRevision: 0
+    skipComponentGovernanceDetection: True
 
-# 1. OPTIONAL: Clean up the hosted agent's disk to prevent the 0x3 error
-- powershell: |
-    Write-Host "Clearing Docker cache and temporary files to free up space..."
-    docker system prune -a -f
-    # Remove unnecessary tool caches to make room for the BC Image
-    Remove-Item -Recurse -Force "C:\hostedtoolcache\windows\Ruby" -ErrorAction SilentlyContinue
-    Remove-Item -Recurse -Force "C:\hostedtoolcache\windows\Go" -ErrorAction SilentlyContinue
-    Remove-Item -Recurse -Force "C:\hostedtoolcache\windows\Python" -ErrorAction SilentlyContinue
-  displayName: 'Free up Disk Space'
+  steps:
+  - task: PowerShell@2
+    displayName: 'Set BuildNumber'
+    inputs:
+      targetType: inline
+      script: 'Write-Host "##vso[build.updatebuildnumber]$(appVersion).$(appBuild).$(appRevision)"'
 
-# 2. Create the Business Central Docker Container
-- task: ALOpsDockerCreate@1
-  displayName: 'ALOps: Create BC Container'
-  inputs:
-    artifact_type: 'sandbox'
-    version_select: '$(bc_version)'
-    container_memory: '8G' # Standard for hosted agents
+  - task: PowerShell@2
+    displayName: 'Run Pipeline'
+    env:
+      InsiderSasToken: '$(InsiderSasToken)'
+      LicenseFile: '$(LicenseFile)'
+      CodeSignCertPfxFile: '$(CodeSignCertPfxFile)'
+      CodeSignCertPfxPassword: '$(CodeSignCertPfxPassword)'
+    inputs:
+      targetType: filePath
+      filePath: 'scripts\DevOps-Pipeline.ps1'
+      arguments: '-environment "AzureDevOps" -version "$(version)" -appBuild $(appBuild) -appRevision $(appRevision)'
+      failOnStderr: true
 
-# 3. Wait for the container to be fully initialized
-- task: ALOpsDockerWait@1
-  displayName: 'ALOps: Wait for Docker'
+  - task: PublishTestResults@2
+    displayName: 'Publish Test Results'
+    condition: and(succeeded(),ne(variables['TestResults'],''))
+    inputs:
+      testResultsFormat: JUnit
+      testResultsFiles: '$(testResults)'
+      failTaskOnFailedTests: true
 
-# 4. Compile the AL Project from your specific path
-- task: ALOpsAppCompiler@1
-  displayName: 'ALOps: Compile BCTrainingApp'
-  inputs:
-    usedependencies: true
-    projectpath: '$(project_path)'
-    nav_computer_name: 'BC'
-    # This prevents the build from failing if symbols aren't found immediately
-    failed_on_warnings: false 
+  - task: PublishBuildArtifacts@1
+    displayName: 'Publish Artifacts'
+    inputs:
+      PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+      ArtifactName: output
 
-# 5. Copy the compiled .app file to the staging area
-- task: CopyFiles@2
-  displayName: 'Stage .app for Publishing'
-  inputs:
-    Contents: '$(project_path)/*.app'
-    TargetFolder: '$(Build.ArtifactStagingDirectory)'
-    flattenFolders: true
-
-# 6. Upload the artifact to Azure DevOps
-- task: PublishBuildArtifacts@1
-  displayName: 'Publish Artifact: BCTrainingApp'
-  inputs:
-    PathtoPublish: '$(Build.ArtifactStagingDirectory)'
-    ArtifactName: 'BC-Apps'
-
-# 7. Final Cleanup (Always runs, even if build fails)
-- task: ALOpsDockerRemove@1
-  displayName: 'ALOps: Remove Container'
-  condition: always()
+  - task: PowerShell@2
+    displayName: 'Cleanup'
+    condition: always()
+    inputs:
+      targetType: filePath
+      filePath: 'scripts\Cleanup.ps1'
+      arguments: '-environment "AzureDevOps"'
+      failOnStderr: false
