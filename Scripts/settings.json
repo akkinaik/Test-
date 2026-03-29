@@ -1,0 +1,46 @@
+{
+  "name": "HelloWorld",
+  "memoryLimit": "6G",
+
+  "installApps": "",
+  "installTestApps": "",
+  "previousApps": "",
+
+  "appFolders": ".",
+  "testFolders": "test",
+
+  "installTestRunner": true,
+  "installTestFramework": false,
+  "installTestLibraries": false,
+  "installPerformanceToolkit": false,
+
+  "doNotSignApps": true,
+
+  "enableCodeCop": false,
+  "enableAppSourceCop": false,
+  "enablePerTenantExtensionCop": true,
+  "enableUICop": true,
+
+  "bcContainerHelperVersion": "latest",
+
+  "additionalCountries": "",
+  "vaultNameForLocal": "BuildVariables",
+
+  "versions": [
+    {
+      "version": "ci",
+      "artifact": "///us/current",
+      "cacheImage": true,
+      "CreateRuntimePackages": true
+    },
+    {
+      "version": "current",
+      "artifact": "///us/current",
+      "CreateRuntimePackages": true
+    },
+    {
+      "version": "cloud",
+      "artifact": "///us/current"
+    }
+  ]
+}
