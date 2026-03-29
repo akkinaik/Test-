@@ -1,12 +1,12 @@
 {
-  "name": ".",
+  "name": "BCTrainingApp",
   "memoryLimit": "6G",
 
   "installApps": "",
   "installTestApps": "",
   "previousApps": "",
 
-  "appFolders": ".",
+  "appFolders": "BCTrainingApp",
   "testFolders": "test",
 
   "installTestRunner": true,
